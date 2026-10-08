@@ -1,6 +1,5 @@
 package com.pfm.dto.request;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import java.math.BigDecimal;
@@ -18,6 +17,5 @@ public record GoalUpdateRequest(
         @Digits(integer = 13, fraction = 2, message = "targetAmount must have at most 13 integer and 2 fraction digits")
         BigDecimal targetAmount,
 
-        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
         LocalDate targetDate) {
 }

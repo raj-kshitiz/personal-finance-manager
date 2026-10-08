@@ -209,7 +209,10 @@ public class GoalServiceImpl implements GoalService {
      * @return the clamped percentage as a {@code double}
      */
     private double computePercentage(BigDecimal currentProgress, BigDecimal targetAmount) {
-        if (targetAmount == null || targetAmount.compareTo(BigDecimal.ZERO) == 0) {
+        // A null target cannot reach this point: the column is NOT NULL and both request DTOs
+        // declare @NotNull, and the caller dereferences targetAmount before calling us. Only the
+        // divide-by-zero guard is live.
+        if (targetAmount.compareTo(BigDecimal.ZERO) == 0) {
             return 0.0;
         }
         BigDecimal percentage = currentProgress

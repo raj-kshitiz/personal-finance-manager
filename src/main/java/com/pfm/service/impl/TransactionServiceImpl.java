@@ -93,7 +93,14 @@ public class TransactionServiceImpl implements TransactionService {
             categoryId = category.getId();
         }
         if (filter.categoryName() != null) {
-            categoryId = resolveCategoryByName(userId, filter.categoryName()).getId();
+            Long byName = resolveCategoryByName(userId, filter.categoryName()).getId();
+            // Both filters may be supplied. Rather than letting one silently win, require them to
+            // agree, so a client never receives rows that contradict the filter it asked for.
+            if (categoryId != null && !categoryId.equals(byName)) {
+                throw new BadRequestException(
+                        "categoryId and category refer to different categories");
+            }
+            categoryId = byName;
         }
 
         return transactionRepository

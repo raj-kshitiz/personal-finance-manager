@@ -170,10 +170,30 @@ class TransactionServiceImplTest {
         when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
         LocalDate start = LocalDate.of(2024, 1, 15);
         LocalDate end = LocalDate.of(2024, 1, 16);
-        when(transactionRepository.search(USER_ID, start, end, null, null)).thenReturn(List.of());
+        Transaction t1 = transactionWithId(7L, user, salary, new BigDecimal("1234.5"), LocalDate.of(2024, 1, 15),
+                "Pay day");
+        Transaction t2 = transactionWithId(8L, user, food, new BigDecimal("40"), LocalDate.of(2024, 1, 16),
+                "Lunch");
+        when(transactionRepository.search(USER_ID, start, end, null, null)).thenReturn(List.of(t1, t2));
 
         TransactionFilter filter = TransactionFilter.parse("2024-01-15", "2024-01-16", null, null, null);
-        service.listTransactions(filter);
+        List<TransactionResponse> result = service.listTransactions(filter);
+
+        assertThat(result).hasSize(2);
+        TransactionResponse r1 = result.get(0);
+        assertThat(r1.id()).isEqualTo(7L);
+        assertThat(r1.amount()).isEqualByComparingTo("1234.50");
+        assertThat(r1.date()).isEqualTo(LocalDate.of(2024, 1, 15));
+        assertThat(r1.category()).isEqualTo("Salary");
+        assertThat(r1.description()).isEqualTo("Pay day");
+        assertThat(r1.type()).isEqualTo(CategoryType.INCOME);
+        TransactionResponse r2 = result.get(1);
+        assertThat(r2.id()).isEqualTo(8L);
+        assertThat(r2.amount()).isEqualByComparingTo("40.00");
+        assertThat(r2.date()).isEqualTo(LocalDate.of(2024, 1, 16));
+        assertThat(r2.category()).isEqualTo("Food");
+        assertThat(r2.description()).isEqualTo("Lunch");
+        assertThat(r2.type()).isEqualTo(CategoryType.EXPENSE);
 
         verify(transactionRepository).search(USER_ID, start, end, null, null);
     }
@@ -182,10 +202,21 @@ class TransactionServiceImplTest {
     void listTransactions_filteredByCategoryId() {
         when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
         when(categoryRepository.findAccessibleById(USER_ID, 10L)).thenReturn(Optional.of(salary));
-        when(transactionRepository.search(USER_ID, null, null, 10L, null)).thenReturn(List.of());
+        Transaction t1 = transactionWithId(3L, user, salary, new BigDecimal("5000"), LocalDate.of(2024, 1, 15),
+                "January Salary");
+        when(transactionRepository.search(USER_ID, null, null, 10L, null)).thenReturn(List.of(t1));
 
         TransactionFilter filter = TransactionFilter.parse(null, null, "10", null, null);
-        service.listTransactions(filter);
+        List<TransactionResponse> result = service.listTransactions(filter);
+
+        assertThat(result).hasSize(1);
+        TransactionResponse response = result.get(0);
+        assertThat(response.id()).isEqualTo(3L);
+        assertThat(response.amount()).isEqualByComparingTo("5000.00");
+        assertThat(response.date()).isEqualTo(LocalDate.of(2024, 1, 15));
+        assertThat(response.category()).isEqualTo("Salary");
+        assertThat(response.description()).isEqualTo("January Salary");
+        assertThat(response.type()).isEqualTo(CategoryType.INCOME);
 
         verify(transactionRepository).search(USER_ID, null, null, 10L, null);
     }
@@ -194,10 +225,21 @@ class TransactionServiceImplTest {
     void listTransactions_filteredByCategoryName() {
         when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
         when(categoryRepository.findAccessibleByName(USER_ID, "Salary")).thenReturn(Optional.of(salary));
-        when(transactionRepository.search(USER_ID, null, null, 10L, null)).thenReturn(List.of());
+        Transaction t1 = transactionWithId(4L, user, salary, new BigDecimal("2500.5"), LocalDate.of(2024, 2, 1),
+                "Bonus");
+        when(transactionRepository.search(USER_ID, null, null, 10L, null)).thenReturn(List.of(t1));
 
         TransactionFilter filter = TransactionFilter.parse(null, null, null, "Salary", null);
-        service.listTransactions(filter);
+        List<TransactionResponse> result = service.listTransactions(filter);
+
+        assertThat(result).hasSize(1);
+        TransactionResponse response = result.get(0);
+        assertThat(response.id()).isEqualTo(4L);
+        assertThat(response.amount()).isEqualByComparingTo("2500.50");
+        assertThat(response.date()).isEqualTo(LocalDate.of(2024, 2, 1));
+        assertThat(response.category()).isEqualTo("Salary");
+        assertThat(response.description()).isEqualTo("Bonus");
+        assertThat(response.type()).isEqualTo(CategoryType.INCOME);
 
         verify(transactionRepository).search(USER_ID, null, null, 10L, null);
     }
@@ -205,12 +247,53 @@ class TransactionServiceImplTest {
     @Test
     void listTransactions_filteredByType() {
         when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
-        when(transactionRepository.search(USER_ID, null, null, null, CategoryType.INCOME)).thenReturn(List.of());
+        Transaction t1 = transactionWithId(5L, user, salary, new BigDecimal("1000"), LocalDate.of(2024, 3, 1),
+                null);
+        Transaction t2 = transactionWithId(6L, user, salary, new BigDecimal("2000"), LocalDate.of(2024, 3, 2),
+                null);
+        when(transactionRepository.search(USER_ID, null, null, null, CategoryType.INCOME))
+                .thenReturn(List.of(t2, t1));
 
         TransactionFilter filter = TransactionFilter.parse(null, null, null, null, "income");
-        service.listTransactions(filter);
+        List<TransactionResponse> result = service.listTransactions(filter);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(TransactionResponse::id).containsExactly(6L, 5L);
+        assertThat(result).extracting(TransactionResponse::type)
+                .containsExactly(CategoryType.INCOME, CategoryType.INCOME);
+        assertThat(result.get(0).amount()).isEqualByComparingTo("2000.00");
+        assertThat(result.get(1).amount()).isEqualByComparingTo("1000.00");
 
         verify(transactionRepository).search(USER_ID, null, null, null, CategoryType.INCOME);
+    }
+
+    @Test
+    void listTransactions_categoryIdAndCategoryName_agreeing_filtersByResolvedId() {
+        when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
+        when(categoryRepository.findAccessibleById(USER_ID, 10L)).thenReturn(Optional.of(salary));
+        when(categoryRepository.findAccessibleByName(USER_ID, "Salary")).thenReturn(Optional.of(salary));
+        Transaction t1 = transactionWithId(9L, user, salary, new BigDecimal("500"), LocalDate.of(2024, 4, 1), null);
+        when(transactionRepository.search(USER_ID, null, null, 10L, null)).thenReturn(List.of(t1));
+
+        TransactionFilter filter = TransactionFilter.parse(null, null, "10", "Salary", null);
+        List<TransactionResponse> result = service.listTransactions(filter);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).id()).isEqualTo(9L);
+        verify(transactionRepository).search(USER_ID, null, null, 10L, null);
+    }
+
+    @Test
+    void listTransactions_categoryIdAndCategoryName_differentCategories_throwsBadRequest() {
+        when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
+        when(categoryRepository.findAccessibleById(USER_ID, 10L)).thenReturn(Optional.of(salary));
+        when(categoryRepository.findAccessibleByName(USER_ID, "Food")).thenReturn(Optional.of(food));
+
+        TransactionFilter filter = TransactionFilter.parse(null, null, "10", "Food", null);
+
+        assertThatThrownBy(() -> service.listTransactions(filter)).isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("categoryId and category refer to different categories");
+        verify(transactionRepository, never()).search(any(), any(), any(), any(), any());
     }
 
     @Test

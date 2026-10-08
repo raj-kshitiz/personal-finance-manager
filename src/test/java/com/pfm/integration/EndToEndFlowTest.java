@@ -261,19 +261,48 @@ class EndToEndFlowTest {
     }
 
     @Test
-    @DisplayName("every protected endpoint rejects an anonymous caller with a JSON 401")
+    @DisplayName("every protected endpoint and verb rejects an anonymous caller with a JSON 401")
     void anonymousAccessIsRejected() {
-        for (String path : new String[]{"/api/categories", "/api/transactions", "/api/goals",
-                "/api/goals/1", "/api/reports/monthly/2024/1", "/api/reports/yearly/2024"}) {
-            ResponseEntity<String> response = get(path, null);
-            assertThat(status(response)).as(path).isEqualTo(401);
-            assertThat(json(response).get("status").asInt()).isEqualTo(401);
-            assertThat(json(response).get("path").asText()).isEqualTo(path);
-            assertThat(response.getBody()).doesNotContain("Exception").doesNotContain("\tat ");
+        // Every method/path pair the API exposes, so the authorization rule table is pinned as a
+        // whole rather than only on the handful of paths a GET sweep would reach.
+        record Endpoint(HttpMethod method, String path, String body) {
         }
-        assertThat(status(call(HttpMethod.POST, "/api/auth/logout", null, null))).isEqualTo(401);
-        assertThat(status(call(HttpMethod.POST, "/api/transactions",
-                "{\"amount\":1,\"date\":\"2024-01-01\",\"category\":\"Food\"}", null))).isEqualTo(401);
+        List<Endpoint> endpoints = List.of(
+                new Endpoint(HttpMethod.GET, "/api/categories", null),
+                new Endpoint(HttpMethod.POST, "/api/categories", "{\"name\":\"X\",\"type\":\"INCOME\"}"),
+                new Endpoint(HttpMethod.DELETE, "/api/categories/Food", null),
+                new Endpoint(HttpMethod.GET, "/api/transactions", null),
+                new Endpoint(HttpMethod.POST, "/api/transactions",
+                        "{\"amount\":1,\"date\":\"2024-01-01\",\"category\":\"Food\"}"),
+                new Endpoint(HttpMethod.PUT, "/api/transactions/1", "{\"amount\":1}"),
+                new Endpoint(HttpMethod.DELETE, "/api/transactions/1", null),
+                new Endpoint(HttpMethod.GET, "/api/goals", null),
+                new Endpoint(HttpMethod.POST, "/api/goals",
+                        "{\"goalName\":\"G\",\"targetAmount\":1,\"targetDate\":\"2030-01-01\"}"),
+                new Endpoint(HttpMethod.GET, "/api/goals/1", null),
+                new Endpoint(HttpMethod.PUT, "/api/goals/1", "{\"targetAmount\":1}"),
+                new Endpoint(HttpMethod.DELETE, "/api/goals/1", null),
+                new Endpoint(HttpMethod.GET, "/api/reports/monthly/2024/1", null),
+                new Endpoint(HttpMethod.GET, "/api/reports/yearly/2024", null),
+                new Endpoint(HttpMethod.POST, "/api/auth/logout", null));
+
+        for (Endpoint endpoint : endpoints) {
+            ResponseEntity<String> response = call(endpoint.method(), endpoint.path(), endpoint.body(), null);
+            assertThat(status(response)).as("%s %s", endpoint.method(), endpoint.path()).isEqualTo(401);
+            assertThat(json(response).get("status").asInt()).isEqualTo(401);
+            assertThat(json(response).get("path").asText()).isEqualTo(endpoint.path());
+            assertThat(response.getBody()).doesNotContain("\tat ").doesNotContain("<html");
+        }
+
+        // Registration and login stay public: they must fail on their merits, never with a 401.
+        assertThat(status(call(HttpMethod.POST, "/api/auth/register", "{}", null))).isEqualTo(400);
+        assertThat(status(call(HttpMethod.POST, "/api/auth/login",
+                "{\"username\":\"nobody@example.com\",\"password\":\"password123\"}", null))).isEqualTo(401);
+
+        // An unknown route is a JSON 404, not an HTML error page.
+        ResponseEntity<String> unknown = get("/api/does-not-exist", null);
+        assertThat(status(unknown)).isIn(401, 404);
+        assertThat(unknown.getBody()).doesNotContain("<html");
     }
 
     @Test
@@ -307,6 +336,21 @@ class EndToEndFlowTest {
                         "{\"amount\":10,\"date\":\"2024-01-01\",\"category\":\"NoSuchCategory\"}", 400),
                 new Case(HttpMethod.POST, "/api/transactions",
                         "{\"amount\":10,\"date\":\"2024-01-01\",\"category\":\"' OR 1=1 --\"}", 400),
+                // A number must never be coerced into a date: as an epoch day, 12345 would
+                // silently become a real transaction date the client never asked for.
+                new Case(HttpMethod.POST, "/api/transactions",
+                        "{\"amount\":10,\"date\":12345,\"category\":\"Food\"}", 400),
+                new Case(HttpMethod.POST, "/api/transactions",
+                        "{\"amount\":10,\"date\":\"\",\"category\":\"Food\"}", 400),
+                // Impossible calendar dates must be rejected, not rounded to the month end.
+                new Case(HttpMethod.POST, "/api/transactions",
+                        "{\"amount\":10,\"date\":\"2024-02-30\",\"category\":\"Food\"}", 400),
+                new Case(HttpMethod.POST, "/api/transactions",
+                        "{\"amount\":10,\"date\":\"2023-02-29\",\"category\":\"Food\"}", 400),
+                new Case(HttpMethod.POST, "/api/transactions",
+                        "{\"amount\":10,\"date\":\"2024-13-01\",\"category\":\"Food\"}", 400),
+                new Case(HttpMethod.POST, "/api/goals",
+                        "{\"goalName\":\"G\",\"targetAmount\":100,\"targetDate\":\"2030-02-31\"}", 400),
                 new Case(HttpMethod.POST, "/api/categories", "{\"name\":\"X\",\"type\":\"SIDEWAYS\"}", 400),
                 new Case(HttpMethod.POST, "/api/categories", "{\"name\":\"\",\"type\":\"INCOME\"}", 400),
                 new Case(HttpMethod.POST, "/api/categories", "{\"name\":\"Food\",\"type\":\"EXPENSE\"}", 409),

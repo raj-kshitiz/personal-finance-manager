@@ -296,6 +296,115 @@ class GoalServiceImplTest {
         assertThat(response.progressPercentage()).isEqualTo(60.0);
     }
 
+    @Test
+    void getGoalOverfundedClampsPercentageAtOneHundredAndFloorsRemainingAtZero() {
+        LocalDate startDate = LocalDate.of(2024, 1, 1);
+        SavingsGoal goal = goal(50L, caller, "Overfunded Goal", "10000.00", LocalDate.of(2027, 1, 1), startDate);
+        when(savingsGoalRepository.findById(50L)).thenReturn(Optional.of(goal));
+        when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
+        stubTotals(startDate, TODAY, "12000.00", "0.00");
+
+        GoalResponse response = service.getGoal(50L);
+
+        assertThat(response.currentProgress()).isEqualByComparingTo("12000.00");
+        assertThat(response.progressPercentage()).isEqualTo(100.0);
+        assertThat(response.remainingAmount()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void getGoalProgressExactlyEqualToTargetYieldsOneHundredPercentAndZeroRemaining() {
+        LocalDate startDate = LocalDate.of(2024, 1, 1);
+        SavingsGoal goal = goal(51L, caller, "Exactly Funded Goal", "10000.00", LocalDate.of(2027, 1, 1), startDate);
+        when(savingsGoalRepository.findById(51L)).thenReturn(Optional.of(goal));
+        when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
+        stubTotals(startDate, TODAY, "10000.00", "0.00");
+
+        GoalResponse response = service.getGoal(51L);
+
+        assertThat(response.currentProgress()).isEqualByComparingTo("10000.00");
+        assertThat(response.progressPercentage()).isEqualTo(100.0);
+        assertThat(response.remainingAmount()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void getGoalProgressOneCentBelowTargetYieldsJustUnderOneHundredPercent() {
+        LocalDate startDate = LocalDate.of(2024, 1, 1);
+        SavingsGoal goal = goal(52L, caller, "Almost Funded Goal", "100.00", LocalDate.of(2027, 1, 1), startDate);
+        when(savingsGoalRepository.findById(52L)).thenReturn(Optional.of(goal));
+        when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
+        stubTotals(startDate, TODAY, "99.99", "0.00");
+
+        GoalResponse response = service.getGoal(52L);
+
+        assertThat(response.progressPercentage()).isEqualTo(99.99);
+        assertThat(response.remainingAmount()).isEqualByComparingTo("0.01");
+    }
+
+    @Test
+    void getGoalProgressOneThirdOfTargetRoundsDownAtThirdDecimal() {
+        // 100/300 = 33.3333...% - the repeating third decimal (3) is below 5, so HALF_UP rounding
+        // leaves the second decimal unchanged at 33.33.
+        LocalDate startDate = LocalDate.of(2024, 1, 1);
+        SavingsGoal goal = goal(53L, caller, "Rounding Down Goal", "300.00", LocalDate.of(2027, 1, 1), startDate);
+        when(savingsGoalRepository.findById(53L)).thenReturn(Optional.of(goal));
+        when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
+        stubTotals(startDate, TODAY, "100.00", "0.00");
+
+        GoalResponse response = service.getGoal(53L);
+
+        assertThat(response.progressPercentage()).isEqualTo(33.33);
+    }
+
+    @Test
+    void getGoalProgressTwoThirdsOfTargetRoundsUpAtThirdDecimal() {
+        // 200/300 = 66.6666...% - the repeating third decimal (6) is 5 or above, so HALF_UP
+        // rounding carries the second decimal from 66.66 up to 66.67.
+        LocalDate startDate = LocalDate.of(2024, 1, 1);
+        SavingsGoal goal = goal(54L, caller, "Rounding Up Goal", "300.00", LocalDate.of(2027, 1, 1), startDate);
+        when(savingsGoalRepository.findById(54L)).thenReturn(Optional.of(goal));
+        when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
+        stubTotals(startDate, TODAY, "200.00", "0.00");
+
+        GoalResponse response = service.getGoal(54L);
+
+        assertThat(response.progressPercentage()).isEqualTo(66.67);
+    }
+
+    @Test
+    void getGoalZeroCurrentProgressSerialisesAsPlainZeroNotScaledZero() {
+        // isEqualByComparingTo("0.00") would also pass if MoneyUtil.normalize regressed to
+        // returning a scale-2 zero; toPlainString() is the only assertion that distinguishes
+        // BigDecimal.ZERO ("0") from a scaled zero ("0.00").
+        LocalDate startDate = LocalDate.of(2024, 2, 1);
+        SavingsGoal goal = goal(55L, caller, "Vacation Fund", "5000.00", LocalDate.of(2027, 12, 1), startDate);
+        when(savingsGoalRepository.findById(55L)).thenReturn(Optional.of(goal));
+        when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
+        when(transactionRepository.sumByType(USER_ID, startDate, TODAY)).thenReturn(List.of());
+
+        GoalResponse response = service.getGoal(55L);
+
+        assertThat(response.currentProgress().toPlainString()).isEqualTo("0");
+    }
+
+    @Test
+    void getGoalWithZeroTargetAmountReturnsZeroPercentageAvoidingDivisionByZero() {
+        // GoalCreateRequest/GoalUpdateRequest both enforce @DecimalMin(inclusive = false) on
+        // targetAmount, so a zero (or null) targetAmount can never reach this service through the
+        // validated HTTP path. The guard in GoalServiceImpl.computePercentage (around lines
+        // 212-213) is therefore only reachable by handing the service a SavingsGoal entity whose
+        // targetAmount is zero directly, as done here, bypassing bean validation entirely.
+        LocalDate startDate = LocalDate.of(2024, 1, 1);
+        SavingsGoal goal = goal(56L, caller, "Broken Goal", "0.00", LocalDate.of(2027, 1, 1), startDate);
+        when(savingsGoalRepository.findById(56L)).thenReturn(Optional.of(goal));
+        when(currentUserProvider.getCurrentUserId()).thenReturn(USER_ID);
+        stubTotals(startDate, TODAY, "500.00", "0.00");
+
+        GoalResponse response = service.getGoal(56L);
+
+        assertThat(response.progressPercentage()).isEqualTo(0.0);
+        assertThat(response.remainingAmount()).isEqualByComparingTo("0.00");
+    }
+
     // ---- updateGoal ----
 
     @Test

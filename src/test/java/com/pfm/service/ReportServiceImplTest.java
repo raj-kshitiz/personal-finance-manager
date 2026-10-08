@@ -134,6 +134,96 @@ class ReportServiceImplTest {
         assertThat(service.monthlyReport(2100, 1).netSavings().toString()).isEqualTo("0");
     }
 
+    @Test
+    void monthlyReportWithIncomeOnlyLeavesExpensesEmptyAndNetSavingsEqualsIncome() {
+        lenientUserId();
+        LocalDate from = LocalDate.of(2024, 5, 1);
+        LocalDate to = LocalDate.of(2024, 5, 31);
+        when(transactionRepository.sumByCategory(USER_ID, from, to)).thenReturn(List.of(
+                new CategoryTotal("Salary", CategoryType.INCOME, new BigDecimal("4000.00"))));
+
+        MonthlyReportResponse response = service.monthlyReport(2024, 5);
+
+        assertThat(response.totalIncome()).containsExactly(Map.entry("Salary", new BigDecimal("4000.00")));
+        assertThat(response.totalExpenses()).isEmpty();
+        assertThat(response.netSavings()).isEqualByComparingTo("4000.00");
+    }
+
+    @Test
+    void monthlyReportWithExpensesOnlyLeavesIncomeEmptyAndNetSavingsNegative() {
+        lenientUserId();
+        LocalDate from = LocalDate.of(2024, 6, 1);
+        LocalDate to = LocalDate.of(2024, 6, 30);
+        when(transactionRepository.sumByCategory(USER_ID, from, to)).thenReturn(List.of(
+                new CategoryTotal("Rent", CategoryType.EXPENSE, new BigDecimal("1500.00"))));
+
+        MonthlyReportResponse response = service.monthlyReport(2024, 6);
+
+        assertThat(response.totalIncome()).isEmpty();
+        assertThat(response.totalExpenses()).containsExactly(Map.entry("Rent", new BigDecimal("1500.00")));
+        assertThat(response.netSavings()).isEqualByComparingTo("-1500.00");
+    }
+
+    @Test
+    void monthlyReportNetSavingsIsNegativeWhenExpensesExceedIncome() {
+        lenientUserId();
+        LocalDate from = LocalDate.of(2024, 7, 1);
+        LocalDate to = LocalDate.of(2024, 7, 31);
+        when(transactionRepository.sumByCategory(USER_ID, from, to)).thenReturn(List.of(
+                new CategoryTotal("Salary", CategoryType.INCOME, new BigDecimal("500.00")),
+                new CategoryTotal("Rent", CategoryType.EXPENSE, new BigDecimal("1500.00"))));
+
+        MonthlyReportResponse response = service.monthlyReport(2024, 7);
+
+        assertThat(response.netSavings()).isEqualByComparingTo("-1000.00");
+        assertThat(response.netSavings().signum()).isEqualTo(-1);
+    }
+
+    @Test
+    void monthlyReportNetSavingsForEmptyPeriodSerialisesAsPlainZero() {
+        // isEqualByComparingTo("0") would not catch a regression to a scale-2 zero;
+        // toPlainString() is the assertion that actually pins the bare-zero serialisation rule.
+        lenientUserId();
+        LocalDate from = LocalDate.of(2025, 4, 1);
+        LocalDate to = LocalDate.of(2025, 4, 30);
+        when(transactionRepository.sumByCategory(USER_ID, from, to)).thenReturn(List.of());
+
+        MonthlyReportResponse response = service.monthlyReport(2025, 4);
+
+        assertThat(response.netSavings().toPlainString()).isEqualTo("0");
+    }
+
+    @Test
+    void monthlyReportPreservesRepositoryOrderForIncomeCategoriesToo() {
+        lenientUserId();
+        LocalDate from = LocalDate.of(2024, 8, 1);
+        LocalDate to = LocalDate.of(2024, 8, 31);
+        when(transactionRepository.sumByCategory(USER_ID, from, to)).thenReturn(List.of(
+                new CategoryTotal("Bonus", CategoryType.INCOME, new BigDecimal("100.00")),
+                new CategoryTotal("Freelance", CategoryType.INCOME, new BigDecimal("200.00")),
+                new CategoryTotal("Salary", CategoryType.INCOME, new BigDecimal("300.00"))));
+
+        MonthlyReportResponse response = service.monthlyReport(2024, 8);
+
+        assertThat(response.totalIncome()).isInstanceOf(LinkedHashMap.class);
+        assertThat(response.totalIncome().keySet()).containsExactly("Bonus", "Freelance", "Salary");
+    }
+
+    @Test
+    void monthlyReportDecemberUsesLastDayOfMonthThirtyOneViaYearMonth() {
+        lenientUserId();
+        LocalDate from = LocalDate.of(2024, 12, 1);
+        LocalDate to = LocalDate.of(2024, 12, 31);
+        when(transactionRepository.sumByCategory(USER_ID, from, to)).thenReturn(List.of(
+                new CategoryTotal("Salary", CategoryType.INCOME, new BigDecimal("2000.00")),
+                new CategoryTotal("Food", CategoryType.EXPENSE, new BigDecimal("300.00"))));
+
+        MonthlyReportResponse response = service.monthlyReport(2024, 12);
+
+        assertThat(response.month()).isEqualTo(12);
+        assertThat(response.netSavings()).isEqualByComparingTo("1700.00");
+    }
+
     // ---- yearlyReport ----
 
     @Test
@@ -162,6 +252,18 @@ class ReportServiceImplTest {
         assertThat(response.totalIncome()).isEmpty();
         assertThat(response.totalExpenses()).isEmpty();
         assertThat(response.netSavings().toString()).isEqualTo("0");
+    }
+
+    @Test
+    void yearlyReportAcceptsBoundaryYears() {
+        lenientUserId();
+        when(transactionRepository.sumByCategory(USER_ID, LocalDate.of(1970, 1, 1), LocalDate.of(1970, 12, 31)))
+                .thenReturn(List.of());
+        when(transactionRepository.sumByCategory(USER_ID, LocalDate.of(2100, 1, 1), LocalDate.of(2100, 12, 31)))
+                .thenReturn(List.of());
+
+        assertThat(service.yearlyReport(1970).netSavings().toPlainString()).isEqualTo("0");
+        assertThat(service.yearlyReport(2100).netSavings().toPlainString()).isEqualTo("0");
     }
 
     @Test

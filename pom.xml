@@ -80,9 +80,16 @@
                 <version>${jacoco.version}</version>
                 <configuration>
                     <excludes>
-                        <!-- Application bootstrap class and framework configuration only. -->
+                        <!--
+                          Bootstrap class and pure framework wiring only. Deliberately NOT excluding
+                          the whole config package: DefaultCategorySeeder contains real business
+                          logic (which categories exist, and the idempotency rule) and must stay
+                          under the coverage gate.
+                        -->
                         <exclude>com/pfm/PersonalFinanceManagerApplication.class</exclude>
-                        <exclude>com/pfm/config/**</exclude>
+                        <exclude>com/pfm/config/SecurityConfig.class</exclude>
+                        <exclude>com/pfm/config/ClockConfig.class</exclude>
+                        <exclude>com/pfm/config/JacksonConfig*.class</exclude>
                     </excludes>
                 </configuration>
                 <executions>

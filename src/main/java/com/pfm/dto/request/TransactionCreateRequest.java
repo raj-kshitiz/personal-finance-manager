@@ -1,6 +1,5 @@
 package com.pfm.dto.request;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -25,7 +24,6 @@ public record TransactionCreateRequest(
         BigDecimal amount,
 
         @NotNull(message = "date is required")
-        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
         LocalDate date,
 
         @NotBlank(message = "category is required")

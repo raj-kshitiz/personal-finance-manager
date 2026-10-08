@@ -172,4 +172,50 @@ class AuthServiceImplTest {
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
+
+    @Test
+    @DisplayName("logout over a secure (HTTPS) request marks the expired cookie Secure")
+    void logoutOverHttpsMarksCookieSecure() {
+        MockHttpServletRequest httpRequest = new MockHttpServletRequest();
+        httpRequest.setSecure(true);
+        MockHttpServletResponse httpResponse = new MockHttpServletResponse();
+
+        authService.logout(httpRequest, httpResponse);
+
+        jakarta.servlet.http.Cookie expiredCookie = httpResponse.getCookie("JSESSIONID");
+        assertThat(expiredCookie).isNotNull();
+        assertThat(expiredCookie.getSecure()).isTrue();
+        assertThat(expiredCookie.getMaxAge()).isZero();
+        assertThat(expiredCookie.isHttpOnly()).isTrue();
+        assertThat(expiredCookie.getPath()).isEqualTo("/");
+    }
+
+    @Test
+    @DisplayName("logout over a plain HTTP request leaves the expired cookie not Secure")
+    void logoutOverHttpLeavesCookieNotSecure() {
+        MockHttpServletRequest httpRequest = new MockHttpServletRequest();
+        httpRequest.setSecure(false);
+        MockHttpServletResponse httpResponse = new MockHttpServletResponse();
+
+        authService.logout(httpRequest, httpResponse);
+
+        jakarta.servlet.http.Cookie expiredCookie = httpResponse.getCookie("JSESSIONID");
+        assertThat(expiredCookie).isNotNull();
+        assertThat(expiredCookie.getSecure()).isFalse();
+    }
+
+    @Test
+    @DisplayName("logout from a non-root context path scopes the expired cookie's Path to that context")
+    void logoutWithNonRootContextPathScopesCookiePath() {
+        MockHttpServletRequest httpRequest = new MockHttpServletRequest();
+        httpRequest.setContextPath("/app");
+        MockHttpServletResponse httpResponse = new MockHttpServletResponse();
+
+        authService.logout(httpRequest, httpResponse);
+
+        jakarta.servlet.http.Cookie expiredCookie = httpResponse.getCookie("JSESSIONID");
+        assertThat(expiredCookie).isNotNull();
+        assertThat(expiredCookie.getPath()).isEqualTo("/app");
+        assertThat(expiredCookie.getMaxAge()).isZero();
+    }
 }
