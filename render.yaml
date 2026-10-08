@@ -1,0 +1,21 @@
+# Render Blueprint for the Personal Finance Manager API.
+# https://render.com/docs/blueprint-spec
+#
+# Deploys the Dockerfile in this repo as a free-tier web service. No secrets are stored here —
+# SESSION_COOKIE_SECURE, APP_TIMEZONE and SPRING_PROFILES_ACTIVE are plain, non-sensitive
+# configuration. The app stays on the default H2, in-memory database unless the postgres profile
+# is also enabled and DB_URL/DB_USERNAME/DB_PASSWORD are supplied (see README).
+services:
+  - type: web
+    name: personal-finance-manager
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod

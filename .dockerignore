@@ -1,0 +1,23 @@
+# Build output and VCS metadata — irrelevant to the Docker build context and would otherwise be
+# re-uploaded to the daemon on every build.
+target/
+.git/
+.gitattributes
+.idea/
+*.iml
+
+# Documentation — not needed inside the image.
+docs/
+README.md
+*.txt
+
+# Local/session artifacts that must never end up in an image layer.
+user1_session.txt
+user2_session.txt
+cookies*.txt
+.env
+.env.*
+
+# Misc OS/editor cruft.
+.DS_Store
+*.log

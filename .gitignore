@@ -16,8 +16,13 @@ build/
 
 *.log
 .env
+.env.*
 .DS_Store
 *.txt.bak
 user1_session.txt
 user2_session.txt
 cookies*.txt
+
+# Docker / local scratch
+*.pid
+HELP.md
