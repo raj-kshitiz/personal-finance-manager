@@ -1,0 +1,12 @@
+# Production-ish defaults for the Render deployment.
+server:
+  servlet:
+    session:
+      cookie:
+        secure: ${SESSION_COOKIE_SECURE:true}
+
+logging:
+  level:
+    root: WARN
+    com.pfm: INFO
+    org.hibernate.SQL: WARN

@@ -1,0 +1,14 @@
+# Activate with: --spring.profiles.active=postgres (or SPRING_PROFILES_ACTIVE=postgres)
+# Everything is driven by environment variables so no credential is ever committed.
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # "update" keeps the assignment deployable without a migration tool.
+      # Switch to "validate" once Flyway/Liquibase owns the schema.
+      ddl-auto: update
