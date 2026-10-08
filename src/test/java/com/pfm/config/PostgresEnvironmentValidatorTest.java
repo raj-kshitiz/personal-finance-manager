@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.mock.env.MockEnvironment;
 
 /** Unit tests for {@link PostgresEnvironmentValidator}. */
@@ -28,32 +29,32 @@ class PostgresEnvironmentValidatorTest {
     @Test
     @DisplayName("a fully configured environment passes")
     void fullyConfigured() {
-        PostgresEnvironmentValidator validator = new PostgresEnvironmentValidator(
+        BeanFactoryPostProcessor check = PostgresEnvironmentValidator.postgresEnvironmentCheck(
                 environmentWith("jdbc:postgresql://localhost:5432/pfm", "pfm", "secret"));
 
-        assertThatCode(validator::afterPropertiesSet).doesNotThrowAnyException();
+        assertThatCode(() -> check.postProcessBeanFactory(null)).doesNotThrowAnyException();
     }
 
     @Test
-    @DisplayName("a single missing variable is named in the failure")
+    @DisplayName("a single missing variable is named, and only that one")
     void singleMissingVariable() {
-        PostgresEnvironmentValidator validator = new PostgresEnvironmentValidator(
+        BeanFactoryPostProcessor check = PostgresEnvironmentValidator.postgresEnvironmentCheck(
                 environmentWith(null, "pfm", "secret"));
 
-        assertThatThrownBy(validator::afterPropertiesSet)
+        assertThatThrownBy(() -> check.postProcessBeanFactory(null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("DB_URL")
                 .hasMessageNotContaining("DB_USERNAME")
-                .hasMessageContaining("postgres");
+                .hasMessageNotContaining("DB_PASSWORD");
     }
 
     @Test
     @DisplayName("every missing variable is listed, not just the first")
     void allMissingVariablesListed() {
-        PostgresEnvironmentValidator validator =
-                new PostgresEnvironmentValidator(environmentWith(null, null, null));
+        BeanFactoryPostProcessor check = PostgresEnvironmentValidator.postgresEnvironmentCheck(
+                environmentWith(null, null, null));
 
-        assertThatThrownBy(validator::afterPropertiesSet)
+        assertThatThrownBy(() -> check.postProcessBeanFactory(null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("DB_URL")
                 .hasMessageContaining("DB_USERNAME")
@@ -63,23 +64,19 @@ class PostgresEnvironmentValidatorTest {
     @Test
     @DisplayName("a blank value counts as missing, not as configured")
     void blankCountsAsMissing() {
-        PostgresEnvironmentValidator validator =
-                new PostgresEnvironmentValidator(environmentWith("   ", "pfm", "secret"));
-
-        assertThatThrownBy(validator::afterPropertiesSet)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("DB_URL");
+        assertThat(PostgresEnvironmentValidator.missingVariables(
+                environmentWith("   ", "pfm", "secret"))).containsExactly("DB_URL");
     }
 
     @Test
     @DisplayName("the message tells the operator what to do next")
     void messageIsActionable() {
-        PostgresEnvironmentValidator validator =
-                new PostgresEnvironmentValidator(environmentWith(null, null, null));
+        String message = PostgresEnvironmentValidator.buildMessage(
+                PostgresEnvironmentValidator.REQUIRED_VARIABLES);
 
-        assertThatThrownBy(validator::afterPropertiesSet)
-                .satisfies(thrown -> assertThat(thrown.getMessage())
-                        .contains("jdbc:postgresql://")
-                        .contains("H2"));
+        assertThat(message)
+                .contains("jdbc:postgresql://")
+                .contains("H2")
+                .contains("postgres");
     }
 }

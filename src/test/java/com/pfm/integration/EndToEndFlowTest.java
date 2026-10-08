@@ -349,6 +349,12 @@ class EndToEndFlowTest {
                         "{\"amount\":10,\"date\":\"2023-02-29\",\"category\":\"Food\"}", 400),
                 new Case(HttpMethod.POST, "/api/transactions",
                         "{\"amount\":10,\"date\":\"2024-13-01\",\"category\":\"Food\"}", 400),
+                // Proleptic year-zero dates parse as JSON but the JDBC round trip shifts them
+                // (0000-01-01 came back as 0001-01-01), so they are rejected rather than corrupted.
+                new Case(HttpMethod.POST, "/api/transactions",
+                        "{\"amount\":10,\"date\":\"0000-01-01\",\"category\":\"Food\"}", 400),
+                new Case(HttpMethod.POST, "/api/transactions",
+                        "{\"amount\":10,\"date\":\"1899-12-31\",\"category\":\"Food\"}", 400),
                 new Case(HttpMethod.POST, "/api/goals",
                         "{\"goalName\":\"G\",\"targetAmount\":100,\"targetDate\":\"2030-02-31\"}", 400),
                 new Case(HttpMethod.POST, "/api/categories", "{\"name\":\"X\",\"type\":\"SIDEWAYS\"}", 400),
@@ -417,6 +423,15 @@ class EndToEndFlowTest {
         for (Query query : queries) {
             ResponseEntity<String> response = get(query.path(), session);
             assertThat(status(response)).as(query.path()).isEqualTo(query.expected());
+        }
+
+        // Regression guard: tightening the date rules must not reject legitimate dates.
+        for (String goodDate : new String[]{"1900-01-01", "2024-02-29", "2024-01-15", "2024-12-31"}) {
+            ResponseEntity<String> accepted = call(HttpMethod.POST, "/api/transactions",
+                    "{\"amount\":10,\"date\":\"" + goodDate + "\",\"category\":\"Food\"}", session);
+            assertThat(status(accepted)).as("%s must be accepted", goodDate).isEqualTo(201);
+            assertThat(json(accepted).get("date").asText())
+                    .as("%s must round-trip unchanged", goodDate).isEqualTo(goodDate);
         }
 
         // An oversized description is rejected rather than truncated or exploding.

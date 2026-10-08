@@ -27,6 +27,14 @@ import org.springframework.stereotype.Service;
 public class TransactionServiceImpl implements TransactionService {
 
     /**
+     * Earliest date a transaction may carry. Dates below this are rejected because the JDBC/H2
+     * round trip silently shifts proleptic year-zero dates, which would store a value the client
+     * never submitted.
+     */
+    private static final LocalDate EARLIEST_DATE = LocalDate.of(1900, 1, 1);
+
+
+    /**
      * Policy flag documenting that a {@code date} property sent on a {@code PUT
      * /api/transactions/{id}} request body is silently ignored rather than rejected or applied.
      * This is forced by the official test script (SCENARIO 2.4) and recorded in
@@ -68,6 +76,12 @@ public class TransactionServiceImpl implements TransactionService {
 
         if (request.date().isAfter(LocalDate.now(clock))) {
             throw new BadRequestException("date must not be in the future");
+        }
+        if (request.date().isBefore(EARLIEST_DATE)) {
+            // Proleptic year-zero dates survive JSON parsing but do not survive the JDBC round
+            // trip: 0000-01-01 comes back as 0001-01-01, silently storing a date the client never
+            // sent. Reject implausible dates outright rather than corrupt them.
+            throw new BadRequestException("date must not be before " + EARLIEST_DATE);
         }
 
         Category category = resolveCategoryByName(user.getId(), request.category());
